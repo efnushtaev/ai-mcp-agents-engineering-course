@@ -161,25 +161,21 @@ cd ..
 
 Установим OpenCode глобально через npm:
 ```bash
-npm install -g @opencode-ai/opencode
+npm install -g opencode-ai
 ```
 После установки проверь версию:
 ```bash
 opencode --version
-# > opencode/1.2.3 linux-x64 node-v20.11.0
+# > opencode/1.15.11 linux-x64 node-v22.14.0
 ```
 
 > **Примечание для Windows:** используй PowerShell от имени администратора, если возникают проблемы с правами. Вместо `opencode` команда может быть `opencode.cmd`.
 
-Теперь попробуем запустить OpenCode без конфигурации:
+Теперь попробуем запустить OpenCode:
 ```bash
 opencode
 ```
-Ты увидишь ошибку:
-```
-Error: Config file not found. Run 'opencode init' to create a default config.
-```
-Это нормально. OpenCode ищет файл `opencode.json` в текущей директории или в `~/.opencode`. Мы создадим его чуть позже.
+Если конфигурация ещё не задана, OpenCode сам предложит настроить провайдера через `/connect`. Выйди пока через Ctrl+C.
 
 Чтобы просто посмотреть доступные команды:
 ```bash
@@ -187,55 +183,69 @@ opencode --help
 ```
 Вывод покажет основные команды и глобальные флаги.
 
-Полезные флаги, которые понадобятся в курсе:
+Полезные флаги и команды, которые понадобятся в курсе:
 - `--log-level DEBUG` — включает подробное логирование (видно, какие инструменты вызываются, ответы LLM).
 - `--print-logs` — выводит логи в stderr (полезно в скриптах).
 - `-m, --model <provider/model>` — явно указать модель (например `deepseek/deepseek-chat`).
-- `--config <file>` — указать конкретный конфигурационный файл.
+- `opencode run "запрос"` — запустить в неинтерактивном режиме.
 
 > **💡 Plan mode (Tab):** В TUI OpenCode есть режим планирования. Нажми **Tab** — модель только опишет план действий, не внося изменения. Переключись обратно в `Build` (ещё раз Tab) и подтверди выполнение.
 
 ### 2.3 Конфигурация OpenCode (`opencode.json`)
 
-OpenCode настраивается через JSON-файл. Вот минимальная структура:
+OpenCode настраивается через JSON-файл. Вот минимальная структура для версии 1.15.11:
 
 ```json
 {
-  "model": "название_модели",
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-chat",
   "provider": {
-    "type": "deepseek | yandexgpt | openai",
-    "api_key": "your_api_key_here",
-    "base_url": "https://api.deepseek.com/v1"  // опционально
+    "deepseek": {
+      "options": {
+        "apiKey": "{env:DEEPSEEK_API_KEY}",
+        "baseURL": "https://api.deepseek.com/v1"
+      }
+    }
   },
-  "system_prompt": "Ты — помощник инженера...",
-  "mcp_servers": []
+  "instructions": ["INSTRUCTIONS.md"],
+  "mcp": {}
 }
 ```
 
 **Ключевые поля:**
-- `model` — идентификатор модели (например, `"deepseek-chat"` или `"yandexgpt/latest"`).
-- `provider.type` — тип провайдера. OpenCode использует внутренние адаптеры для каждого.
-- `provider.api_key` — API-ключ (можно передавать через переменные окружения `${ENV_VAR}`).
-- `provider.base_url` — для self-hosted или кастомных эндпоинтов.
-- `system_prompt` — системный промпт, который задаёт роль ассистенту.
-- `mcp_servers` — массив конфигураций MCP-серверов (подключим в следующих блоках).
+- `model` — идентификатор модели в формате `provider/model_id` (например, `"deepseek/deepseek-chat"`).
+- `provider` — объект, где ключ — имя провайдера (`deepseek`, `anthropic`, `openai` и т.д.).
+  - `options.apiKey` — API-ключ (через `{env:VAR_NAME}` для переменных окружения).
+  - `options.baseURL` — для self-hosted или кастомных эндпоинтов.
+- `instructions` — массив путей к файлам с инструкциями (заменяет `system_prompt`).
+- `mcp` — объект конфигураций MCP-серверов (подключим в следующих блоках).
 
 Создадим в папке `opencode-config/` файл `opencode.deepseek.json` с шаблоном:
 
 ```json
 {
-  "model": "deepseek-chat",
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-chat",
   "provider": {
-    "type": "deepseek",
-    "api_key": "${DEEPSEEK_API_KEY}",
-    "base_url": "https://api.deepseek.com/v1"
+    "deepseek": {
+      "options": {
+        "apiKey": "{env:DEEPSEEK_API_KEY}",
+        "baseURL": "https://api.deepseek.com/v1"
+      }
+    }
   },
-  "system_prompt": "Ты — инженерный AI-ассистент. Твоя задача — помогать проектировать детали и управлять лазерным гравировщиком.",
-  "mcp_servers": []
+  "instructions": ["INSTRUCTIONS.md"],
+  "mcp": {}
 }
 ```
 
-Обрати внимание: мы использовали `"${DEEPSEEK_API_KEY}"` — OpenCode поддерживает подстановку переменных окружения. Так ключ не будет светиться в конфиге.
+Обрати внимание: мы использовали `"{env:DEEPSEEK_API_KEY}"` — OpenCode подставляет переменные окружения на лету. Так ключ не будет светиться в конфиге.
+
+Рядом создадим файл `opencode-config/INSTRUCTIONS.md` с системным промптом:
+
+```markdown
+Ты — инженерный AI-ассистент. Твоя задача — помогать проектировать детали и управлять лазерным гравировщиком.
+```
 
 Сейчас запустить с этим конфигом не получится, потому что переменная ещё не задана. Мы сделаем это в Модуле 0.3.
 
@@ -245,15 +255,15 @@ OpenCode настраивается через JSON-файл. Вот миним�
 
 1. Какие три ключевые возможности OpenCode делают его идеальным оркестратором для нашего курса?
 2. Как работает Plan mode (Tab) в TUI и чем он полезен на этапе разработки?
-3. Какое поле конфигурации отвечает за подключение MCP-серверов?
-4. Почему в поле `api_key` мы указали `${DEEPSEEK_API_KEY}`, а не сам ключ?
+3. Какое поле конфигурации отвечает за подключение MCP-серверов и какой у него формат?
+4. Почему в поле `apiKey` мы указали `"{env:DEEPSEEK_API_KEY}"`, а не сам ключ?
 5. Можно ли использовать один файл конфигурации для нескольких LLM-провайдеров? Если нет — как удобно переключаться?
 
 ### 🛠 Практическое задание (Модуль 0.2)
 - Установи OpenCode глобально, проверь версию (`opencode --version`) и изучи флаги через `--help`.
 - Запусти `opencode`, переключись в **Plan mode** (Tab) и посмотри, как меняется интерфейс.
-- Создай в папке `opencode-config/` файл `opencode.deepseek.json` по шаблону выше.
-- Попробуй выполнить `opencode --config opencode-config/opencode.deepseek.json --help` — ошибок быть не должно, просто выведет справку.
+- Создай в папке `opencode-config/` файлы `opencode.deepseek.json` и `INSTRUCTIONS.md` по шаблонам выше.
+- Попробуй выполнить `opencode run --model deepseek/deepseek-chat "Привет"` — команда должна выполниться (может быть ошибка API-ключа, это нормально на этом этапе).
 - Сделай скриншот успешного выполнения команды.
 
 ---
@@ -275,7 +285,7 @@ DeepSeek предлагает недорогое API, совместимое с 
 
 ### 3.2 Регистрация в Yandex Cloud и получение доступа к YandexGPT
 
-YandexGPT — это российская модель, доступная через Yandex Cloud. Для работы понадобится API-ключ или IAM-токен. Мы будем использовать статический API-ключ для простоты.
+YandexGPT — это российская модель, доступная через Yandex Cloud. Для работы понадобится IAM-токен или API-ключ сервисного аккаунта. OpenCode не имеет встроенного провайдера YandexGPT, но мы подключим его как кастомный OpenAI-совместимый провайдер.
 
 1. Зайди в [консоль Yandex Cloud](https://console.cloud.yandex.ru/) и создай новый проект (платёжный аккаунт привязывать не обязательно для стартового гранта, но может потребоваться).
 2. Перейди в **IAM** → **Service accounts**, создай сервисный аккаунт с именем `ai-engineer`.
@@ -304,38 +314,50 @@ YANDEX_API_KEY=your_yandex_key_here
 ```
 Его можно коммитить — коллеги будут знать, какие переменные нужны.
 
-> **Важно для Windows:** если используешь PowerShell, для загрузки переменных из `.env` можно применить утилиту `dotenv-cli` или вручную задать через `$env:DEEPSEEK_API_KEY = "..."`. Мы будем использовать bash-совместимый подход: `export $(cat .env | xargs)` в Linux/macOS. В Windows (Git Bash) работает тот же способ.
+> **Важно для Windows:** если используешь PowerShell, переменные из `.env` можно загрузить через `Get-Content .env | ForEach-Object { ... }`. Но проще всего — запускать OpenCode в Git Bash.
 
-Загрузи переменные в текущую сессию:
+OpenCode v1.15.11 сам читает `.env` файл в корне проекта — **явно экспортировать переменные не нужно**. Но для проверки можно выполнить:
 ```bash
-cd ai-engineer-course
-export $(cat .env | xargs)   # Linux/macOS / Git Bash
-# Проверим:
-echo $DEEPSEEK_API_KEY
+echo $DEEPSEEK_API_KEY   # если пусто — выполни export
 ```
 
 ### 3.4 Настройка OpenCode для DeepSeek и YandexGPT
 
-У нас уже есть конфиг для DeepSeek. Осталось создать конфиг для YandexGPT. В папке `opencode-config/` создай `opencode.yandex.json`:
+У нас уже есть конфиг для DeepSeek. YandexGPT не является встроенным провайдером OpenCode, поэтому подключим его как кастомный OpenAI-совместимый провайдер. В папке `opencode-config/` создай `opencode.yandex.json`:
 
 ```json
 {
-  "model": "yandexgpt/latest",
+  "$schema": "https://opencode.ai/config.json",
+  "model": "yandex/yandexgpt",
   "provider": {
-    "type": "yandexgpt",
-    "api_key": "${YANDEX_API_KEY}",
-    "base_url": "https://llm.api.cloud.yandex.net/foundationModels/v1"
+    "yandex": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "YandexGPT",
+      "options": {
+        "apiKey": "{env:YANDEX_API_KEY}",
+        "baseURL": "https://llm.api.cloud.yandex.net/foundationModels/v1"
+      },
+      "models": {
+        "yandexgpt": {
+          "name": "YandexGPT"
+        }
+      }
+    }
   },
-  "system_prompt": "Ты — инженерный AI-ассистент. Твоя задача — помогать проектировать детали и управлять лазерным гравировщиком.",
-  "mcp_servers": []
+  "instructions": ["INSTRUCTIONS.md"],
+  "mcp": {}
 }
 ```
 
-Обрати внимание: `base_url` для YandexGPT оканчивается на `/v1`, но OpenCode сам добавит нужные пути.
+**Ключевые отличия от встроенного провайдера:**
+- `npm`: `"@ai-sdk/openai-compatible"` — указывает OpenCode использовать OpenAI-совместимый адаптер.
+- `name`: отображаемое имя провайдера в интерфейсе.
+- `models` — объект, где ключ — ID модели, а значение — её настройки.
+- Модель указывается как `yandex/yandexgpt` (провайдер/модель).
 
 ### 3.5 Тестовый прогон с DeepSeek
 
-Убедись, что переменная `DEEPSEEK_API_KEY` загружена, и выполни:
+Убедись, что файл `.env` существует в корне проекта с `DEEPSEEK_API_KEY`, и выполни:
 
 ```bash
 opencode --config opencode-config/opencode.deepseek.json
@@ -344,7 +366,7 @@ opencode --config opencode-config/opencode.deepseek.json
 Откроется интерактивная сессия. Ты увидишь приглашение:
 
 ```
-🤖 OpenCode (deepseek-chat) > _
+🤖 OpenCode (deepseek/deepseek-chat) > _
 ```
 
 Введи первый запрос:
@@ -367,12 +389,13 @@ opencode --config opencode-config/opencode.deepseek.json
 Если модель отвечает «4», значит всё работает. Для выхода напиши `exit` или нажми Ctrl+C.
 
 > **Типичные проблемы:**
-> - **Ошибка 401 (Unauthorized):** проверь, что API-ключ правильный и переменная загружена. Используй `echo $DEEPSEEK_API_KEY` для проверки.
+> - **Ошибка 401 (Unauthorized):** проверь, что API-ключ правильный и указан в `.env`. Используй `echo $DEEPSEEK_API_KEY` для проверки.
 > - **Пустой ответ или обрыв связи:** DeepSeek иногда таймаутит при высокой нагрузке. Попробуй ещё раз или проверь сеть/VPN.
+> - **Ошибка "Provider not found":** убедись, что провайдер `deepseek` указан в конфиге как ключ объекта `provider`, а не через `"type"`.
 
 ### 3.6 Тестовый прогон с YandexGPT
 
-Аналогично загружаем `YANDEX_API_KEY` и запускаем:
+Убедись, что `.env` содержит `YANDEX_API_KEY`, и запусти:
 
 ```bash
 opencode --config opencode-config/opencode.yandex.json
@@ -393,6 +416,11 @@ YandexGPT ответит что-то вроде:
 ```
 Модель должна ответить «4». Это подтверждает базовую работу.
 
+> **Типичные проблемы с YandexGPT:**
+> - **Ошибка "Provider not found" или "Unknown provider":** проверь, что в конфиге указан `"npm": "@ai-sdk/openai-compatible"`.
+> - **Ошибка 401:** убедись, что API-ключ правильный, а переменная `YANDEX_API_KEY` есть в `.env`.
+> - **Пустой ответ:** проверь `baseURL` — для YandexGPT актуальный эндпоинт может отличаться. Сверься с документацией Yandex Cloud.
+
 ### ✅ Чекпоинт: «Готовность к Блоку 1»
 
 Поздравляю! Ты достиг состояния, когда:
@@ -409,12 +437,14 @@ YandexGPT ответит что-то вроде:
 2. Какую роль необходимо выдать сервисному аккаунту Yandex Cloud для работы с YandexGPT?
 3. Почему переменные окружения для ключей мы прописываем в отдельном `.env` файле, а не в JSON-конфиге?
 4. Что означает ошибка `401 Unauthorized` при запуске OpenCode и как её исправить?
-5. Можно ли использовать одновременно оба провайдера в одном экземпляре OpenCode? Если нет, как быстро переключаться?
+5. Почему YandexGPT настраивается через `"npm": "@ai-sdk/openai-compatible"`, а не как встроенный провайдер?
 
 ### 🛠 Практическое задание (Модуль 0.3)
 - Получи API-ключи DeepSeek и Yandex Cloud.
-- Создай `.env` и `.env.example` в корне проекта, загрузи переменные.
-- Запусти OpenCode поочерёдно с каждым провайдером, выполни по 3–4 реплики (например: «Как тебя зовут?», «Реши уравнение x^2 = 16», «Сгенерируй случайное число от 1 до 100»).
+- Создай `.env` и `.env.example` в корне проекта.
+- Создай файлы `opencode.deepseek.json`, `opencode.yandex.json` и `INSTRUCTIONS.md` в `opencode-config/`.
+- Запусти OpenCode поочерёдно с каждым провайдером: `opencode --config opencode-config/opencode.deepseek.json` и `opencode --config opencode-config/opencode.yandex.json`.
+- Выполни по 3–4 реплики (например: «Как тебя зовут?», «Реши уравнение x^2 = 16», «Сгенерируй случайное число от 1 до 100»).
 - Сделай скриншоты обоих диалогов и сохрани их.
 
 ---
@@ -423,7 +453,7 @@ YandexGPT ответит что-то вроде:
 
 **Цель:** закрепить навыки настройки и общения с моделями через OpenCode.
 
-1. **Настрой оба провайдера** — DeepSeek и YandexGPT — с отдельными конфигурационными файлами и `.env`.
+1. **Настрой оба провайдера** — DeepSeek (встроенный) и YandexGPT (кастомный, через `@ai-sdk/openai-compatible`) — с отдельными конфигурационными файлами и `.env`.
 2. **Выполни по 5 осмысленных запросов** к каждому провайдеру. Темы:
    - Инженерные расчёты (например, «Рассчитай площадь круга диаметром 10 см»).
    - Генерация текста (напиши краткую инструкцию по созданию 3D-модели болта).
@@ -444,11 +474,12 @@ YandexGPT ответит что-то вроде:
 | Проблема | Вероятная причина | Решение |
 |----------|-------------------|---------|
 | `opencode: command not found` | Глобальный npm-путь не в PATH | Перезагрузи терминал, либо добавь `$(npm -g bin)` в PATH. В Windows проверь `%APPDATA%\npm`. |
-| `Error: Config file not found` при запуске | Нет файла конфига или неверный путь | Убедись, что флаг `--config` указывает на существующий файл, либо создай `opencode.json` в рабочей директории. |
+| Ошибка "Provider not found" | Неверный формат конфига провайдера | В v1.15.11 провайдеры указываются как `"deepseek": { "options": {...} }`, а не через `"type": "deepseek"`. |
 | DeepSeek возвращает пустой ответ | Проблемы с сетью или превышена квота | Проверь VPN, баланс в личном кабинете, попробуй позже. |
+| YandexGPT не отвечает / "Unknown provider" | Не указан `"npm": "@ai-sdk/openai-compatible"` | YandexGPT — кастомный провайдер; обязательно добавь `npm` поле в конфиг. |
 | YandexGPT отвечает «Permission denied» | Не включён сервис Foundation Models или нет роли | Активируй сервис в консоли, добавь роль `ai.languageModels.user`. |
 | Ошибка `401 Unauthorized` | Неверный или просроченный ключ | Пересоздай ключ в панели, проверь, что переменная окружения точно загружена (`echo $API_KEY`). |
-| Переменные из `.env` не видны | Не выполнен `export` | Выполни `export $(cat .env | xargs)` в том же терминале, где запускаешь OpenCode. Для Windows используй `Get-Content .env | ForEach-Object { ... }`. |
+| Переменные из `.env` не видны | opencode не видит .env в текущей директории | Убедись, что `.env` лежит в корневой директории проекта (где запускаешь opencode). OpenCode v1.15.11 читает .env автоматически. |
 
 ---
 
