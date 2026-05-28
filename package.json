@@ -1,0 +1,23 @@
+{
+  "name": "ai-mcp-agents-engineering-course",
+  "version": "1.0.0",
+  "description": "**Практический курс по созданию AI-агентов с использованием MCP-серверов, оркестрации и промышленного деплоя.**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/efnushtaev/ai-mcp-agents-engineering-course.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/efnushtaev/ai-mcp-agents-engineering-course/issues"
+  },
+  "homepage": "https://github.com/efnushtaev/ai-mcp-agents-engineering-course#readme",
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.48"
+  }
+}

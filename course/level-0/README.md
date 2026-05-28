@@ -292,8 +292,9 @@ YandexGPT — это российская модель, доступная че�
 3. Назначь роли: `ai.languageModels.user` (для доступа к YandexGPT) и `editor` (для общего управления).
 4. В том же сервисном аккаунте выбери **Create API key**, скопируй значение.
 5. Убедись, что сервис **YandexGPT API** активирован: в консоли перейди в "Foundation Models" и нажми "Enable".
+6. Скопируй **ID каталога** (folder ID) — он понадобится для модели URI. Найти можно на главной странице консоли в карточке каталога или в URL после `/folders/`.
 
-Теперь у тебя есть ключ, который выглядит как `AQVN...` или `y0_...`.
+Теперь у тебя есть ключ (выглядит как `AQVN...`) и folder ID.
 
 ### 3.3 Безопасное хранение ключей
 
@@ -303,6 +304,7 @@ YandexGPT — это российская модель, доступная че�
 ```env
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 YANDEX_API_KEY=AQVNxxxxxxxxxxxxxxxx
+YANDEX_FOLDER_ID=b1gxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Сразу проверь, что в `.gitignore` есть строка `.env` (мы добавили её ранее).
@@ -311,34 +313,47 @@ YANDEX_API_KEY=AQVNxxxxxxxxxxxxxxxx
 ```env
 DEEPSEEK_API_KEY=your_deepseek_key_here
 YANDEX_API_KEY=your_yandex_key_here
+YANDEX_FOLDER_ID=your_folder_id_here
 ```
 Его можно коммитить — коллеги будут знать, какие переменные нужны.
 
 > **Важно для Windows:** если используешь PowerShell, переменные из `.env` можно загрузить через `Get-Content .env | ForEach-Object { ... }`. Но проще всего — запускать OpenCode в Git Bash.
 
-OpenCode v1.15.11 сам читает `.env` файл в корне проекта — **явно экспортировать переменные не нужно**. Но для проверки можно выполнить:
+OpenCode умеет читать `.env` автоматически. Но если переменные не подхватились — экспортируй вручную перед запуском:
 ```bash
-echo $DEEPSEEK_API_KEY   # если пусто — выполни export
+export $(grep -v '^#' .env | xargs)
+echo $YANDEX_API_KEY   # должно вывести ключ
 ```
 
 ### 3.4 Настройка OpenCode для DeepSeek и YandexGPT
 
-У нас уже есть конфиг для DeepSeek. YandexGPT не является встроенным провайдером OpenCode, поэтому подключим его как кастомный OpenAI-совместимый провайдер. В папке `opencode-config/` создай `opencode.yandex.json`:
+У нас уже есть конфиг для DeepSeek. YandexGPT не является встроенным провайдером OpenCode, поэтому подключим его через пакет `@ai-sdk/openai-compatible`. Для начала установи его в папку `opencode-config/`:
+
+```bash
+cd opencode-config
+npm install @ai-sdk/openai-compatible@^2.0.48
+cd ..
+```
+
+Теперь в папке `opencode-config/` создай `opencode.yandex.json`:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "yandex/yandexgpt",
+  "model": "yandex/gpt://<FOLDER_ID>/yandexgpt/latest",
   "provider": {
     "yandex": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "YandexGPT",
       "options": {
-        "apiKey": "{env:YANDEX_API_KEY}",
-        "baseURL": "https://llm.api.cloud.yandex.net/foundationModels/v1"
+        "baseURL": "https://llm.api.cloud.yandex.net/v1",
+        "headers": {
+          "Authorization": "Api-Key {env:YANDEX_API_KEY}",
+          "x-folder-id": "<FOLDER_ID>"
+        }
       },
       "models": {
-        "yandexgpt": {
+        "gpt://<FOLDER_ID>/yandexgpt/latest": {
           "name": "YandexGPT"
         }
       }
@@ -352,15 +367,17 @@ echo $DEEPSEEK_API_KEY   # если пусто — выполни export
 **Ключевые отличия от встроенного провайдера:**
 - `npm`: `"@ai-sdk/openai-compatible"` — указывает OpenCode использовать OpenAI-совместимый адаптер.
 - `name`: отображаемое имя провайдера в интерфейсе.
-- `models` — объект, где ключ — ID модели, а значение — её настройки.
-- Модель указывается как `yandex/yandexgpt` (провайдер/модель).
+- `options.headers` — YandexGPT использует заголовок `Authorization: Api-Key <ключ>`, а не стандартное `Bearer`. Folder ID передаётся через заголовок `x-folder-id`.
+- `models` — объект, где ключ — полный URI модели формата `gpt://<folder_id>/yandexgpt/latest`.
+- Модель указывается как `yandex/gpt://<FOLDER_ID>/yandexgpt/latest` (провайдер/модель).
+- **Важно:** замени `<FOLDER_ID>` на ID твоего каталога из Yandex Cloud (например, `b1g0935stk09dh1fpn7i`). `{env:YANDEX_API_KEY}` подставляется OpenCode из переменной окружения — экспортируй её или укажи в `.env`.
 
 ### 3.5 Тестовый прогон с DeepSeek
 
 Убедись, что файл `.env` существует в корне проекта с `DEEPSEEK_API_KEY`, и выполни:
 
 ```bash
-opencode --config opencode-config/opencode.deepseek.json
+OPENCODE_CONFIG=opencode-config/opencode.deepseek.json opencode
 ```
 
 Откроется интерактивная сессия. Ты увидишь приглашение:
@@ -395,10 +412,10 @@ opencode --config opencode-config/opencode.deepseek.json
 
 ### 3.6 Тестовый прогон с YandexGPT
 
-Убедись, что `.env` содержит `YANDEX_API_KEY`, и запусти:
+Убедись, что `.env` содержит `YANDEX_API_KEY` и `YANDEX_FOLDER_ID`, и запусти:
 
 ```bash
-opencode --config opencode-config/opencode.yandex.json
+OPENCODE_CONFIG=opencode-config/opencode.yandex.json opencode
 ```
 
 Введи:
@@ -417,9 +434,10 @@ YandexGPT ответит что-то вроде:
 Модель должна ответить «4». Это подтверждает базовую работу.
 
 > **Типичные проблемы с YandexGPT:**
-> - **Ошибка "Provider not found" или "Unknown provider":** проверь, что в конфиге указан `"npm": "@ai-sdk/openai-compatible"`.
-> - **Ошибка 401:** убедись, что API-ключ правильный, а переменная `YANDEX_API_KEY` есть в `.env`.
-> - **Пустой ответ:** проверь `baseURL` — для YandexGPT актуальный эндпоинт может отличаться. Сверься с документацией Yandex Cloud.
+> - **Ошибка "Provider not found" или "Unknown provider":** проверь, что в конфиге указан `"npm": "@ai-sdk/openai-compatible"` и пакет установлен (`npm install @ai-sdk/openai-compatible` в папке с конфигом).
+> - **Ошибка 401 / Unauthenticated:** убедись, что переменная `YANDEX_API_KEY` загружена (`echo $YANDEX_API_KEY`). Если пусто — выполни `export $(grep -v '^#' .env | xargs)`.
+> - **Ошибка "Failed to parse model URI":** проверь, что в поле `model` конфига используется URI формата `gpt://<folder_id>/yandexgpt/latest`, а `folder_id` совпадает с тем, в котором создан сервисный аккаунт.
+> - **Ошибка "Permission denied":** сервисному аккаунту не назначена роль `ai.languageModels.user` на каталог. Назначь в консоли Yandex Cloud.
 
 ### ✅ Чекпоинт: «Готовность к Блоку 1»
 
@@ -443,7 +461,7 @@ YandexGPT ответит что-то вроде:
 - Получи API-ключи DeepSeek и Yandex Cloud.
 - Создай `.env` и `.env.example` в корне проекта.
 - Создай файлы `opencode.deepseek.json`, `opencode.yandex.json` и `INSTRUCTIONS.md` в `opencode-config/`.
-- Запусти OpenCode поочерёдно с каждым провайдером: `opencode --config opencode-config/opencode.deepseek.json` и `opencode --config opencode-config/opencode.yandex.json`.
+- Запусти OpenCode поочерёдно с каждым провайдером: `OPENCODE_CONFIG=opencode-config/opencode.deepseek.json opencode` и `OPENCODE_CONFIG=opencode-config/opencode.yandex.json opencode`.
 - Выполни по 3–4 реплики (например: «Как тебя зовут?», «Реши уравнение x^2 = 16», «Сгенерируй случайное число от 1 до 100»).
 - Сделай скриншоты обоих диалогов и сохрани их.
 
@@ -476,8 +494,10 @@ YandexGPT ответит что-то вроде:
 | `opencode: command not found` | Глобальный npm-путь не в PATH | Перезагрузи терминал, либо добавь `$(npm -g bin)` в PATH. В Windows проверь `%APPDATA%\npm`. |
 | Ошибка "Provider not found" | Неверный формат конфига провайдера | В v1.15.11 провайдеры указываются как `"deepseek": { "options": {...} }`, а не через `"type": "deepseek"`. |
 | DeepSeek возвращает пустой ответ | Проблемы с сетью или превышена квота | Проверь VPN, баланс в личном кабинете, попробуй позже. |
-| YandexGPT не отвечает / "Unknown provider" | Не указан `"npm": "@ai-sdk/openai-compatible"` | YandexGPT — кастомный провайдер; обязательно добавь `npm` поле в конфиг. |
-| YandexGPT отвечает «Permission denied» | Не включён сервис Foundation Models или нет роли | Активируй сервис в консоли, добавь роль `ai.languageModels.user`. |
+| YandexGPT не отвечает / "Unknown provider" | Не указан `"npm": "@ai-sdk/openai-compatible"` или пакет не установлен | YandexGPT — кастомный провайдер; добавь `npm` поле в конфиг и выполни `npm install @ai-sdk/openai-compatible` в папке с конфигом. |
+| YandexGPT отвечает «Permission denied» | Не включён сервис Foundation Models или нет роли у сервисного аккаунта | Активируй сервис в консоли, добавь роль `ai.languageModels.user` сервисному аккаунту на каталог. |
+| YandexGPT «Failed to parse model URI» | Неверный формат model в конфиге | Используй `gpt://{env:YANDEX_FOLDER_ID}/yandexgpt/latest`, а folder_id должен совпадать с каталогом сервисного аккаунта. |
+| YandexGPT «Unauthenticated» | Переменная `YANDEX_API_KEY` не загружена | Экспортируй переменные: `export $(grep -v '^#' .env | xargs)`. |
 | Ошибка `401 Unauthorized` | Неверный или просроченный ключ | Пересоздай ключ в панели, проверь, что переменная окружения точно загружена (`echo $API_KEY`). |
 | Переменные из `.env` не видны | opencode не видит .env в текущей директории | Убедись, что `.env` лежит в корневой директории проекта (где запускаешь opencode). OpenCode v1.15.11 читает .env автоматически. |
 

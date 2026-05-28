@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "yandex/gpt://{env:YANDEX_FOLDER_ID}/yandexgpt-5.1/latest",
+  "provider": {
+    "yandex": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "YandexGPT",
+      "options": {
+        "baseURL": "https://llm.api.cloud.yandex.net/v1",
+        "headers": {
+          "Authorization": "Api-Key {env:YANDEX_FOLDER_ID}",
+          "x-folder-id": "{env:YANDEX_FOLDER_ID}"
+        }
+      },
+      "models": {
+        "gpt://{env:YANDEX_FOLDER_ID}/yandexgpt-5.1/latest": {
+          "name": "YandexGPT-5.1"
+        }
+      }
+    }
+  },
+  "instructions": ["INSTRUCTIONS.md"],
+  "mcp": {}
+}
